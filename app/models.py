@@ -16,3 +16,12 @@ class RegisterToken(Base):
                         default=datetime.now() + timedelta(hours=24))
 
 
+class UpdateEmailToken(Base):
+    __tablename__ = "update_email_token"
+    id = Column(Integer, primary_key=True, nullable=False)
+    token_id = Column(String, nullable=False)
+    email = Column(String, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False,
+                        server_default=text("now()"))
+    expires_at = Column(TIMESTAMP(timezone=True), nullable=False,
+                        default=datetime.now() + timedelta(hours=24))
