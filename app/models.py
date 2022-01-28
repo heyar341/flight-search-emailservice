@@ -25,6 +25,7 @@ class Manipulation(Base):
         nullable=False
     )
     manipulation = Column(String, nullable=False)
-    token = relationship("tokens",
-                         backref=backref("manipulations", uselist=False)
-                         )
+    token = relationship(
+        "Token",
+        backref=backref("manipulations", uselist=False)
+    )
