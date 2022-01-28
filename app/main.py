@@ -1,12 +1,42 @@
 import threading
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, status, Depends, HTTPException
 from rabbitmq import consume
 from threading import Thread
 from logging import getLogger
+from schemas import TokenIn, TokenOut
+from sqlalchemy.orm import Session
+from database import get_db
+from models import Token, Manipulation
 
 app = FastAPI()
 logger = getLogger("uvicorn")
+
+
+@app.post(
+    "/check_token",
+    status_code=status.HTTP_200_OK,
+    response_model=TokenOut
+)
+def check_token(request: TokenIn, db: Session = Depends(get_db)) -> dict:
+    auth_data = db.query(
+        Token.email, Manipulation.manipulation
+    ).join(
+        Manipulation, Token.id == Manipulation.token_id
+    ).filter(
+        Token.token == request.token
+    ).first()
+
+    if not auth_data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="認証情報が取得できませんでした。")
+
+    email, manipulation = auth_data
+    if manipulation != request.manipulation:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="認証情報が一致しません。")
+
+    return {"email": email}
 
 
 @app.on_event("shutdown")
@@ -32,4 +62,4 @@ if __name__ == "__main__":
     for thread in threads_list:
         thread.start()
 
-    uvicorn.run("main:app", host="0.0.0.0", port=5001, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=5001, reload=False)
