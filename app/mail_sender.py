@@ -2,6 +2,8 @@ from requests import post
 from os import environ
 import json
 from uuid import uuid4
+from database import SessionLocal
+from models import Token, Manipulation
 
 
 def get_register_body() -> dict:
@@ -36,16 +38,33 @@ class EmailSender(object):
         self.recipient = recipient
         if action == "register":
             self.body = get_register_body()
-            self.append_token()
+            token = self.append_token()
+            self.save_token_and_email(token, action)
         elif action == "update_email":
             self.body = get_update_email_body()
-            self.append_token()
+            token = self.append_token()
+            self.save_token_and_email(token, action)
         elif action == "confirm_register":
             self.body = get_confirm_register_body()
 
-    def append_token(self) -> None:
+    def append_token(self) -> str:
         token = uuid4().hex
         self.body["message"] += token
+        return token
+
+    def save_token_and_email(self, token: str, action: str) -> None:
+        with SessionLocal() as db:
+            if action == "register":
+                token_data = Token(
+                    **{"token": token, "email": self.recipient}
+                )
+            db.add(token_data)
+            db.commit()
+            manipulation = Manipulation(
+                **{"token_id": token_data.id, "manipulation": action}
+            )
+            db.add(manipulation)
+            db.commit()
 
     def send(self) -> (int, str):
         response = post(
