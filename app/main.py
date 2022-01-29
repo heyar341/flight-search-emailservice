@@ -8,6 +8,7 @@ from schemas import TokenIn, TokenOut
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Token, Manipulation
+from datetime import datetime, timezone
 
 app = FastAPI()
 logger = getLogger("uvicorn")
@@ -20,7 +21,7 @@ logger = getLogger("uvicorn")
 )
 def check_token(request: TokenIn, db: Session = Depends(get_db)) -> dict:
     auth_data = db.query(
-        Token.email, Manipulation.manipulation
+        Token.email, Token.expires_at, Manipulation.manipulation
     ).join(
         Manipulation, Token.id == Manipulation.token_id
     ).filter(
@@ -31,10 +32,14 @@ def check_token(request: TokenIn, db: Session = Depends(get_db)) -> dict:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="認証情報が取得できませんでした。")
 
-    email, manipulation = auth_data
+    email, expires_at, manipulation = auth_data
     if manipulation != request.manipulation:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail="認証情報が一致しません。")
+
+    if datetime.now(timezone.utc) > expires_at:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="トークンの期限が切れています。")
 
     return {"email": email}
 
