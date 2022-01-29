@@ -1,8 +1,7 @@
 import threading
 import uvicorn
 from fastapi import FastAPI, status, Depends, HTTPException
-from rabbitmq import consume
-from threading import Thread
+from rabbitmq import ConsumerThread
 from logging import getLogger
 from schemas import TokenIn, TokenOut
 from sqlalchemy.orm import Session
@@ -49,7 +48,7 @@ def terminate_threads() -> None:
     for thread in threading.enumerate():
         if thread is threading.current_thread():
             continue
-        thread.join()
+        thread.terminate_consume()
 
 
 if __name__ == "__main__":
@@ -59,12 +58,8 @@ if __name__ == "__main__":
         ("confirm_register_queue", "confirm_register")
     )
 
-    threads_list = []
-    for thread_arg in queue_name_and_action:
-        thread = Thread(target=consume, args=thread_arg, daemon=True)
-        threads_list.append(thread)
-
-    for thread in threads_list:
+    for queue_name, action in queue_name_and_action:
+        thread = ConsumerThread(queue_name=queue_name, action=action)
         thread.start()
 
     uvicorn.run("main:app", host="0.0.0.0", port=5001, reload=False)
