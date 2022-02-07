@@ -1,3 +1,7 @@
+import logging
+
+import json
+
 import sys
 import pika
 from os import environ
@@ -5,7 +9,9 @@ from logging import getLogger
 from mail_sender import EmailSender
 from threading import Thread
 
-logger = getLogger("uvicorn")
+logger = getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(logging.StreamHandler(sys.stdout))
 
 
 class ConsumerThread(Thread):
@@ -18,9 +24,12 @@ class ConsumerThread(Thread):
         self.action = action
 
     def callback(self, ch, method, properties, body) -> None:
-        mail_address = body.decode()
+        message = json.loads(body.decode())
+        mail_address = message.get("email")
+        URL = message.get("URL", None)
         logger.info(f"Received {mail_address} from {self.queue_name}.")
-        mail_sender = EmailSender(recipient=mail_address, action=self.action)
+        mail_sender = EmailSender(recipient=mail_address, action=self.action,
+                                  URL=URL)
         status_code, message = mail_sender.send()
         if status_code == 200:
             logger.info(f"Succeeded in sending email to {mail_address}")
@@ -50,7 +59,7 @@ class ConsumerThread(Thread):
         channel = connection.channel()
 
         channel.queue_declare(queue=self.queue_name, durable=True)
-        print(f"Waiting for messages from {self.queue_name}.")
+        logger.info(f"Waiting for messages from {self.queue_name}.")
         channel.basic_qos(prefetch_count=1)
         channel.basic_consume(
             queue=self.queue_name, on_message_callback=self.callback,
@@ -58,9 +67,3 @@ class ConsumerThread(Thread):
         )
 
         channel.start_consuming()
-
-    def terminate_consume(self):
-        try:
-            sys.exit(0)
-        except SystemExit:
-            logger.info(f"Thread for {self.name} was terminated.")
