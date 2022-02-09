@@ -1,16 +1,12 @@
 from requests import post
 from os import environ
 import json
-from uuid import uuid4
-from database import SessionLocal
-from models import Token, Manipulation
 
 
 def get_register_body() -> dict:
     return {
         "subject": "新規登録フォームの送信",
         "message": f"下記のURLから新規登録を行なってください。\n"
-                   f"{environ.get('REGISTER_URL')}"
     }
 
 
@@ -27,46 +23,29 @@ def get_update_email_body() -> dict:
         "subject": "メールアドレスの更新",
         "message": "Find Flightsをご利用いただきありがとうございます\n"
                    "下記のURLにアクセスしていただくことでメールアドレスの更新が完了します。\n"
-                   f"{environ.get('UPDATE_URL')}"
     }
 
 
 class EmailSender(object):
-    def __init__(self, recipient, action):
+    def __init__(self, recipient: str, action: str, URL: str):
         self.api_key = environ.get("MAIL_API_KEY")
         self.domain_name = environ.get("MAIL_DOMAIN_NAME")
         self.recipient = recipient
-        if action == "register":
+        if action == "pre_register":
             self.body = get_register_body()
-            token = self.append_token()
-            self.save_token_and_email(token, action)
         elif action == "update_email":
             self.body = get_update_email_body()
-            token = self.append_token()
-            self.save_token_and_email(token, action)
         elif action == "confirm_register":
             self.body = get_confirm_register_body()
 
-    def append_token(self) -> str:
-        token = uuid4().hex
-        self.body["message"] += token
-        return token
+        self.URL = URL
 
-    def save_token_and_email(self, token: str, action: str) -> None:
-        with SessionLocal() as db:
-            if action == "register":
-                token_data = Token(
-                    **{"token": token, "email": self.recipient}
-                )
-            db.add(token_data)
-            db.commit()
-            manipulation = Manipulation(
-                **{"token_id": token_data.id, "manipulation": action}
-            )
-            db.add(manipulation)
-            db.commit()
+    def append_URL_to_body(self):
+        self.body["message"] += self.URL
 
     def send(self) -> (int, str):
+        if self.URL:
+            self.append_URL_to_body()
         response = post(
             url=f"https://api.mailgun.net/v3/{self.domain_name}/messages",
             auth=("api", self.api_key),
